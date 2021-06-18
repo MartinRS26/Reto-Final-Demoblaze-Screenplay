@@ -392,3 +392,218 @@ public class OrdenDePagoPage {
 ```
 ## Models
 
+### Data
+Esta clase crea un objeto de tipo Data con seis variables de tipo String y los getter correspondientes a cada variable
+```java
+public class Data {
+    private String name;
+    private String cardNumber;
+    private String country;
+    private String city;
+    private String month;
+    private String year;
+
+
+    public Data(String name, String cardNumber, String country, String city,
+                String month, String year) {
+
+        this.name = name;
+        this.cardNumber = cardNumber;
+        this.country = country;
+        this.city = city;
+        this.month = month;
+        this.year = year;
+
+    }
+
+
+    public String getName() {
+        return name;
+    }
+
+    public String getCardNumber() {
+        return cardNumber;
+    }
+
+    public String getCountry() {
+        return country;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public String getMonth() {
+        return month;
+    }
+
+    public String getYear() {
+        return year;
+    }
+
+
+}
+```
+## Exceptions
+
+### Excepciones
+Esta clase contiene la definición de dos excepciones OrdenNoCorresponde y ProductoNoCorresponde que indicarán cuando los datos en la orden de pago
+y el producto en el carrito no corresponda
+
+```java
+public class Excepciones extends AssertionError{
+    /*  La excepción OrdenNoCorresponde se presentará cuando los datos "name" y "cardNumber"de la orden
+        de pago generada al comprar el producto, no sean los mismos que los ingresados en formulario del
+        pedido
+     */
+    public static final String OrdenNoCorresponde = "Los datos del comprador no coinciden en la orden";
+
+    /*  La excepcion ProductoNoCorresponde se presentará cuando el nombre del producto que se añade al
+        carrito es diferente al producto establecido
+    */
+    public static final String ProductoNoCorresponde ="El producto en el carrito no corresponde al seleccionado";
+
+    public Excepciones(String mensaje, Throwable causa){
+        super(mensaje, causa);
+    }
+```
+## Questions
+
+### NombreProductoCarrito
+Realiza la validación del nombre del producto que es agregado al carrito y en el método que sobreescribe retorna un String
+```java
+public class NombreProductoCarrito implements Question<String> {
+    public static Question<String> value() {
+        return new NombreProductoCarrito();
+
+    }
+
+    @Override
+    public String answeredBy(Actor actor) {
+        return NOMBRE_PRODUCTO.resolveFor(actor).getText();
+    }
+
+```
+### DatosOrdenDePago
+Realiza la validacion de los datos (name y cardNumber) en la orden de pago generada retornando en sus metodos un string
+```java
+public class DatosOrdenDePago {
+    public static Question<String> nombreOrden() {
+        return actor -> TextContent.of(NOMBRE_ORDEN).viewedBy(actor).asString().trim().substring(55, 61);
+
+    }
+
+    public static Question<String> numeroTarjeta() {
+        return actor -> TextContent.of(NUMERO_TARJETA_ORDEN).viewedBy(actor).asString().trim().substring(39, 49);
+
+    }
+
+}
+
+```
+## Runners
+
+### CompraExitosaRunner
+Realiza la ejecución de los pasos en el compra_exitosa.feature y busca los metodos en el paquete StepDefinitions
+```java
+@RunWith(CucumberWithSerenity.class)
+@CucumberOptions(features = "src/test/resources/features/compra_exitosa.feature",
+        glue = "com.demoblaze.automation.stepdefinitions",
+        snippets = SnippetType.CAMELCASE,
+        tags = "@EscenarioCorrecto")
+public class CompraExitosaRunner {
+}
+```
+## StepDefinitions
+
+### CompraExitosaStepDefinition
+Contiene todos los pasos de la ejecucion de Compra Exitosa, ademas de la definicion del actor y el rastreo del driver del navegador
+```java
+public class CompraExitosaStepDefinition {
+    @Managed(driver = "chrome")
+    private WebDriver hisBrowser;
+    private Actor usuario = Actor.named("usuario");
+
+    String nombreProducto = "Samsung galaxy s6";
+
+    @Before
+    public void setUp() {
+        usuario.can(BrowseTheWeb.with(hisBrowser));
+        usuario.wasAbleTo(Open.browserOn(new DemoBlazeHomePage()));
+    }
+
+    @Dado("^que el usuario esta logueado$")
+    public void queElUsuarioEstaLogueado() {
+        usuario.attemptsTo(IrHaciaLoginDeUsuario.DemoBlaze());
+        usuario.attemptsTo(DiligenciarCredencialesUsuario.DemoBlaze());
+        usuario.attemptsTo(IrAPerfilDeUsuario.Demoblaze());
+    }
+
+    @Cuando("^agrego producto al carro$")
+    public void agregoProductoAlCarro() throws InterruptedException {
+        usuario.attemptsTo(SeleccionarProducto.DemoBlaze());
+        usuario.attemptsTo(AgregarAlCarrito.DemoBlaze());
+        WebDriverWait wait = new WebDriverWait(hisBrowser, 9);
+        Alert alert = wait.until(ExpectedConditions.alertIsPresent());
+        alert.accept();
+
+    }
+
+    @Entonces("^valido el nombre del articulo$")
+    public void validoElNombreDelArticulo() {
+        usuario.attemptsTo(IrAlCarrito.DemoBlaze());
+        usuario.should(seeThat("El nombre del producto del carrito es:", NombreProductoCarrito.value(), equalTo(nombreProducto)).orComplainWith(Excepciones.class, Excepciones.ProductoNoCorresponde));
+
+    }
+
+    @Entonces("^los datos de orden de compra seran \"([^\"]*)\" y \"([^\"]*)\"$")
+    public void losDatosDeOrdenDeCompraSeranY(String nombreEnOrden, String tarjetaOrden, List<Data> dataList) {
+        usuario.attemptsTo(RealizarPedido.DemoBlaze());
+        WebDriverWait wait1 = new WebDriverWait(hisBrowser, 9);
+        wait1.until(ExpectedConditions.presenceOfElementLocated(By.xpath("//*/div[@id='orderModal']/div/div")));
+        usuario.attemptsTo(DiligenciarDatosPedido.DemoBlaze(dataList.get(0)));
+        usuario.attemptsTo(GenerarOrdenDePago.DemoBlaze());
+        usuario.should(seeThat("El nombre en la orden de compra es", DatosOrdenDePago.nombreOrden(), equalTo(nombreEnOrden)).orComplainWith(Excepciones.class, Excepciones.OrdenNoCorresponde));
+        usuario.should(seeThat("El numero de la tarjeta de compra es", DatosOrdenDePago.numeroTarjeta(), equalTo(tarjetaOrden)).orComplainWith(Excepciones.class, Excepciones.OrdenNoCorresponde));
+
+
+    }
+
+
+}
+```
+## Features
+
+### compra_exitosa.feature
+Contiene dos escenarios el primero indica la prueba correcta de una compra exitosa y el segundo muestra una prueba fallida.
+```gherkin
+#language: es
+Característica: Compra Exitosa
+  Se verificarán los datos en la orden de pago para validar compra exitosa
+
+  @EscenarioCorrecto
+  Esquema del escenario: Verificar compra
+    Dado que el usuario esta logueado
+    Cuando agrego producto al carro
+    Entonces valido el nombre del articulo
+    Y los datos de orden de compra seran "<name>" y "<cardNumber>"
+      | name   | cardNumber   | country   | city   | month   | year   |
+      | <name> | <cardNumber> | <country> | <city> | <month> | <year> |
+    Ejemplos:
+      | name   | cardNumber | country  | city  | month | year |
+      | Martin | 1357924680 | Colombia | Tunja | Feb   | 2025 |
+
+  @EscenarioFallido
+  Esquema del escenario: Verificar compra
+    Dado que el usuario esta logueado
+    Cuando agrego producto al carro
+    Entonces valido el nombre del articulo
+    Y los datos de orden de compra seran "<nombrePrueba>" y "<cardNumberPrueba>"
+      | name   | cardNumber   | country   | city   | month   | year   |
+      | <name> | <cardNumber> | <country> | <city> | <month> | <year> |
+    Ejemplos:
+      | name   | cardNumber | country  | city  | month | year | nombrePrueba | cardNumberPrueba |
+      | Martin | 1357924680 | Colombia | Tunja | Feb   | 2025 | Alberto      | 0864297531       |
+
+```
+
